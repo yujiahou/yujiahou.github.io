@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar View</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .tooltip {
+            position: absolute;
+            background: white;
+            padding: 5px;
+            border: 1px solid #ccc;
+            visibility: hidden;
+        }
+        svg {
+            font-family: "Trebuchet MS", sans-serif;
+            font-size: 10px;
+        }
+        h1{
+            font-family: "Trebuchet MS", sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calendar View</h1>
+    <div id="chart"></div>
+    <h1>Daily Radar</h1>
+    <div id="visualization-container"></div>
+    <script>
+        function Calendar(data, {
+        x = ([x]) => x, // given d in data, returns the (temporal) x-value
+        y = ([, y]) => y, // given d in data, returns the (quantitative) y-value
+        title, // given d in data, returns the title text
+        width = 1000, // width of the chart, in pixels
+        cellSize = 27, // width and height of an individual day, in pixels
+        weekday = "monday", // either: weekday, sunday, or monday
+        formatDay = i => "SMTWTFS"[i], // given a day number in [0, 6], the day-of-week label
+        formatMonth = "%b", // format specifier string for months (above the chart)
+        yFormat, // format specifier string for values (in the title)
+        colors = d3.interpolateGreens
+        } = {}) {
+        // Compute values.
+        const X = d3.map(data, x);
+        const Y = d3.map(data, y);
+        const I = d3.range(X.length);
+
+        const countDay = weekday === "sunday" ? i => i : i => (i + 6) % 7;
+        const timeWeek = weekday === "sunday" ? d3.utcSunday : d3.utcMonday;
+        const weekDays = weekday === "weekday" ? 5 : 7;
+        const height = cellSize * (weekDays + 2);
+
+        // Compute a color scale. This assumes a diverging color scheme where the pivot
+        // is zero, and we want symmetric difference around zero.
+        const max = d3.quantile(Y, 0.9975, Math.abs);
+        const color = d3.scaleSequential([60.03026587301587, 75.19594841269841], colors).unknown("none");
+
+        // Construct formats.
+        formatMonth = d3.utcFormat(formatMonth);
+
+        // Compute titles.
+        if (title === undefined) {
+            const formatDate = d3.utcFormat("%B %-d, %Y");
+            const formatValue = color.tickFormat(100, yFormat);
+            title = i => `${formatDate(X[i])}\n${formatValue(Y[i])}`;
+        } else if (title !== null) {
+            const T = d3.map(data, title);
+            title = i => T[i];
+        }
+
+        // Group the index by year, in reverse input order. (Assuming that the input is
+        // chronological, this will show years in reverse chronological order.)
+        const years = d3.groups(I, i => X[i].getUTCFullYear()).reverse();
+
+        function pathMonth(t) {
+            const d = Math.max(0, Math.min(weekDays, countDay(t.getUTCDay())));
+            const w = timeWeek.count(d3.utcYear(t), t);
+            return `${d === 0 ? `M${w * cellSize},0`
+                : d === weekDays ? `M${(w + 1) * cellSize},0`
+                : `M${(w + 1) * cellSize},0V${d * cellSize}H${w * cellSize}`}V${weekDays * cellSize}`;
+        }
+
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", "100%")
+            .attr("height", height * years.length)
+            // .attr("viewBox", [0, 0, width, height * years.length])
+            .attr("style", "max-width: 100%; height: auto; height: intrinsic;")
+            .attr("font-family", "sans-serif")
+            // .style("border", "1px solid #ccc")
+            .style("display", "block") 
+            .style("margin", "0 auto")
+            .attr("font-size", 10);
+
+        const year = svg.selectAll("g")
+            .data(years)
+            .join("g")
+            .attr("transform", (d, i) => `translate(40.5,${height * i + cellSize * 1.5})`);
+
+        year.append("text")
+            .attr("x", -5)
+            .attr("y", -5)
+            .attr("font-weight", "bold")
+            .attr("text-anchor", "end")
+            .text(([key]) => key);
+
+        year.append("g")
+            .attr("text-anchor", "end")
+            .selectAll("text")
+            .data(weekday === "weekday" ? d3.range(1, 6) : d3.range(7))
+            .join("text")
+            .attr("x", -5)
+            .attr("y", i => (countDay(i) + 0.5) * cellSize)
+            .attr("dy", "0.31em")
+            .text(formatDay);
+
+        const cell = year.append("g")
+            .selectAll("rect")
+            .data(weekday === "weekday"
+                ? ([, I]) => I.filter(i => ![0, 6].includes(X[i].getUTCDay()))
+                : ([, I]) => I)
+            .join("rect")
+            .attr("width", cellSize - 1)
+            .attr("height", cellSize - 1)
+            .attr("x", i => timeWeek.count(d3.utcYear(X[i]), X[i]) * cellSize + 0.5)
+            .attr("y", i => countDay(X[i].getUTCDay()) * cellSize + 0.5)
+            .attr("fill", i => color(Y[i]));
+
+        if (title) cell.append("title")
+            .text(title);
+
+        const month = year.append("g")
+            .selectAll("g")
+            .data(([, I]) => d3.utcMonths(d3.utcMonth(X[I[0]]), X[I[I.length - 1]]))
+            .join("g");
+
+        month.filter((d, i) => i).append("path")
+            .attr("fill", "none")
+            .attr("stroke", "#fff")
+            .attr("stroke-width", 3)
+            .attr("d", pathMonth);
+
+        month.append("text")
+            .attr("x", d => timeWeek.count(d3.utcYear(d), timeWeek.ceil(d)) * cellSize + 2)
+            .attr("y", -5)
+            .text(formatMonth);
+
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("position", "absolute")
+            .style("background", "white")
+            .style("padding", "5px")
+            .style("border", "1px solid #ccc")
+            .style("visibility", "hidden");
+        
+        cell.on("mouseover", function(event, i) {
+            d3.select(this)
+            .transition()
+            .attr("stroke", "black");
+            tooltip.style("visibility", "visible")
+                .text(`Date: ${d3.utcFormat("%B %-d, %Y")(X[i])}, dBA: ${Y[i]}`);
+            
+        })
+        .on("mousemove", function(event) {
+            tooltip.style("top", (event.pageY - 10) + "px")
+                    .style("left", (event.pageX + 10) + "px");
+        })
+        .on("mouseout", function() {
+            d3.select(this)
+            .transition()
+            .attr("stroke", null);
+            tooltip.style("visibility", "hidden");
+        })
+        .on("click", function(event, i) {
+            const clickedDate = X[i];
+            const clickedVal = Y[i];
+            console.log(`Clicked Date: ${clickedDate}`);
+            updateVisualization(new Date(clickedDate),clickedVal);
+            
+            
+        });
+        
+
+        return Object.assign(svg.node(), {scales: {color}});
+        }
+        d3.csv("peak_avg.csv", d3.autoType).then(data => {
+            Calendar(data, {
+                x: d => d.date, 
+                y: d => d.value,
+                width: 1000  
+            });
+        }).catch(error => {
+            console.error("Error loading CSV:", error);
+        });
+
+        function updateVisualization(date,val) {
+        const formatDateToFile = d3.utcFormat("%Y-%m-%d")(date);
+        const filename = `http://localhost:8000/${formatDateToFile}_minutely_avg.csv`;
+        d3.select("#visualization-container").selectAll("*").remove();
+        d3.select("#visualization-container")
+            .append("div")
+            // .html(`<strong style="font-family: "Trebuchet MS", sans-serif;">Date:</strong> ${formatDateToFile}<br><strong>Average:</strong> ${val}`)
+            .html(`
+                <div style="font-family: Trebuchet MS, sans-serif; font-size: 14px;">
+                    <strong>Date:</strong> ${formatDateToFile}<br>
+                    <strong>Average:</strong> ${val}
+                </div>
+            `);
+
+
+
+        d3.csv(filename).then(data => {
+            console.log("File loaded:", data);
+
+            const times = Object.keys(data[0]);
+            const leq_dba_values = Object.values(data[1]).map(value => +value);
+
+            console.log("Times:", times);
+            console.log("LEQ dBA Values:", leq_dba_values);
+
+            const formattedData = times.map((time, index) => ({
+                time: time,
+                leq_dba: +leq_dba_values[index] 
+            }));
+            const radius = 400;
+            const svg = d3.select("#visualization-container")
+            .append("svg")
+            .attr("width", 1000)
+            .attr("height", 1000)
+            .style("display", "block") 
+            .style("margin", "0 auto")
+            // .style("border", "1px solid black");
+
+            const angleSlice = (Math.PI * 2) / times.length;
+        
+            const radarLine = d3.lineRadial()
+                .radius((d) => ((d - 55) / (90 - 55)) * radius) 
+                .angle((d, i) => i * angleSlice);
+        
+            const radarGroup = svg.append("g")
+                .attr("transform", `translate(500, 500)`);
+        
+            const tooltip = d3.select("body").append("div")
+                .style("position", "absolute")
+                .style("background", "#f9f9f9")
+                .style("padding", "5px")
+                .style("border", "1px solid #ccc")
+                .style("border-radius", "5px")
+                .style("visibility", "visible");
+        
+            const gridLevels = d3.range(55, 91, 5);
+            gridLevels.forEach(level => {
+                radarGroup.append("circle")
+                .attr("r", ((level - 55) / (90 - 55)) * radius) 
+                .attr("fill", "none")
+                .attr("stroke", "lightgray")
+                .attr("stroke-width", 1);
+            
+                const levelRadius = ((level - 55) / (90 - 55)) * radius;
+            
+                radarGroup.append("text")
+                    .attr("x", levelRadius + 10) 
+                    .attr("y", 0)
+                    .attr("dy", "0.75em")
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "15px")
+                    .style("fill", "black")
+                    .text(level); 
+            });
+        
+        
+            const angleScale = d3.scaleLinear()
+                .domain([0, 24])
+                .range([0, 2 * Math.PI]);
+        
+            const numPoints = 24;
+        
+            radarGroup.selectAll(".spider-web-line")
+                .data(d3.range(numPoints))
+                .enter().append("line")
+                .attr("class", "spider-web-line")
+                .attr("x1", 0)
+                .attr("y1", 0)
+                .attr("x2", d => radius * Math.cos(angleScale(d) - Math.PI / 2)) 
+                .attr("y2", d => radius * Math.sin(angleScale(d) - Math.PI / 2)) 
+                .attr("stroke", "#ccc")
+                .attr("stroke-width", 1);
+        
+            const radarPath = radarGroup.append("path")
+                .datum(leq_dba_values)
+                .attr("d", radarLine)
+                .attr("fill", "none")
+                .attr("opacity", 0.6)
+                .attr("stroke", "#386899")
+                .attr("stroke-width", 2);
+            
+            // radarPath.on("mouseenter", function() {
+            //   d3.select(this)
+            //     .transition()
+            //     .duration(200)
+            //     .attr("fill", "steelblue")
+            //     .attr("opacity", 0.6);
+            // })
+            // .on("mouseleave", function() {
+            //     d3.select(this)
+            //       .transition()
+            //       .duration(200)
+            //       .attr("fill", "none");
+            // });
+            
+        
+            radarGroup.selectAll(".tick")
+                .data(d3.range(0, 24, 3))
+                .enter().append("text")
+                .attr("class", "tick")
+                .attr("x", d => radius * Math.cos(angleScale(d) - Math.PI / 2))
+                .attr("y", d => radius * Math.sin(angleScale(d) - Math.PI / 2))
+                .attr("text-anchor", "middle")
+                .text(d => `${d}:00`);
+        
+            
+            function convertToTimeString(minutes) {
+                const hours = String(Math.floor(minutes / 60)).padStart(2, '0'); 
+                const mins = String(minutes % 60).padStart(2, '0'); 
+                return `${hours}:${mins}`; 
+            }
+            
+            radarGroup.selectAll(".data-point")
+                .data(formattedData)
+                .enter().append("circle")
+                .attr("class", "data-point")
+                .attr("cx", d => ((d.leq_dba - 55) / (90 - 55)) * radius * Math.cos(times.indexOf(d.time) * angleSlice - Math.PI / 2))
+                .attr("cy", d => ((d.leq_dba - 55) / (90 - 55)) * radius * Math.sin(times.indexOf(d.time) * angleSlice - Math.PI / 2))
+                .attr("r", 2)
+                .attr("fill", "steelblue")
+                .attr("stroke", "white")
+                .attr("stroke-width", 0.25)
+                .on("mouseover", function(event, d) {
+                    d3.select(this).transition().attr("r", 8); 
+                    tooltip.style("visibility", "visible")
+                        .text(`Time: ${convertToTimeString(d.time)}, dBA: ${d.leq_dba.toFixed(1)}`);
+                })
+                .on("mousemove", function(event) {
+                    tooltip.style("top", (event.pageY - 10) + "px")
+                        .style("left", (event.pageX + 10) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select(this).transition().attr("r", 2); 
+                    tooltip.style("visibility", "hidden");
+                });
+        
+        
+                return svg.node();
+
+            
+            })
+
+        .catch(error => {
+                    console.error("Error fetching file:", error);
+                });
+
+        
+        }
+    </script>
+
+</body>
+</html>
