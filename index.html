@@ -195,7 +195,7 @@
 
         function updateVisualization(date,val) {
         const formatDateToFile = d3.utcFormat("%Y-%m-%d")(date);
-        const filename = `http://localhost:8000/${formatDateToFile}_minutely_avg.csv`;
+        const filename = `https://yujiahou.github.io./${formatDateToFile}_minutely_avg.csv`;
         d3.select("#visualization-container").selectAll("*").remove();
         d3.select("#visualization-container")
             .append("div")
