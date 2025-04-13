@@ -35,7 +35,6 @@
         width = 1000, 
         containerWidth = document.getElementById("chart").clientWidth,
         cellSize = Math.floor(containerWidth / 53),
-        cellSize = 27, 
         weekday = "monday", 
         formatDay = i => "SMTWTFS"[i], 
         formatMonth = "%b", 
@@ -79,12 +78,16 @@
 
         const svg = d3.select("#chart")
             .append("svg")
-            .attr("viewBox", [0, 0, width, height])
-            .attr("preserveAspectRatio", "xMidYMid meet")
-            .style("width", "100%")
-            .style("height", "auto")
-            .style("display", "block")
-            .style("margin", "0 auto");
+            .attr("width", "100%")
+            .attr("height", height * years.length)
+            // .attr("viewBox", [0, 0, width, height * years.length])
+            .attr("style", "max-width: 100%; height: auto;")
+            .attr("font-family", "sans-serif")
+            // .style("border", "1px solid #ccc")
+            .style("display", "block") 
+            .style("margin", "0 auto")
+            .attr("font-size", 10);
+            
 
         const year = svg.selectAll("g")
             .data(years)
