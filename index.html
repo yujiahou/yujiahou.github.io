@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <h1 style="text-align: center;">Noise data from MDC Building Construction</h1>
     <title>Calendar View</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
@@ -25,6 +26,12 @@
 <body>
     <h1>Calendar View</h1>
     <div id="chart"></div>
+    <div id="legend" style="width: 300px; margin: 20px auto;"></div>
+    <p style="text-align: right;">Hover on each cell to observe daily <b>working hour*</b> average noise values. </p>
+    <p style="text-align: right;">Click to expand the minutely radar chart of the day selected. </p>
+    <p style="text-align: right;">*: Working hour: 7:00AM-9:00AM, </p>
+    <p style="text-align: right;">9:30AM-12:00PM, </p>
+    <p style="text-align: right;">12:30PM-3:00PM. </p>
     <h1>Daily Radar</h1>
     <div id="visualization-container"></div>
     <script>
@@ -150,6 +157,48 @@
             .style("border", "1px solid #ccc")
             .style("visibility", "hidden");
         
+            const legendWidth = 300;
+            const legendHeight = 10;
+
+            const minDb = 60.03026587301587;
+            const maxDb = 75.19594841269841;
+
+            const legendSvg = d3.select("#legend")
+            .append("svg")
+            .attr("width", legendWidth)
+            .attr("height", 40);
+
+            const defs = legendSvg.append("defs");
+            const gradient = defs.append("linearGradient")
+            .attr("id", "legend-gradient");
+
+            gradient.selectAll("stop")
+            .data(d3.range(0, 1.01, 0.01))
+            .enter()
+            .append("stop")
+            .attr("offset", d => `${d * 100}%`)
+            .attr("stop-color", d => d3.interpolateGreens(d));
+
+            legendSvg.append("rect")
+            .attr("x", 0)
+            .attr("y", 10)
+            .attr("width", legendWidth)
+            .attr("height", legendHeight)
+            .style("fill", "url(#legend-gradient)");
+
+            legendSvg.append("text")
+            .attr("x", 0)
+            .attr("y", 35)
+            .attr("font-size", 10)
+            .text(`${minDb.toFixed(1)} dB`);
+
+            legendSvg.append("text")
+            .attr("x", legendWidth)
+            .attr("y", 35)
+            .attr("text-anchor", "end")
+            .attr("font-size", 10)
+            .text(`${maxDb.toFixed(1)} dB`);
+
         cell.on("mouseover", function(event, i) {
             d3.select(this)
             .transition()
@@ -172,6 +221,28 @@
             const clickedDate = X[i];
             const clickedVal = Y[i];
             console.log(`Clicked Date: ${clickedDate}`);
+            const thisCell = d3.select(this);
+
+            const originalX = +thisCell.attr("x");
+            const originalY = +thisCell.attr("y");
+            const originalW = +thisCell.attr("width");
+            const originalH = +thisCell.attr("height");
+
+            const shrink = 0.1; 
+
+            thisCell.transition()
+                .duration(100)
+                .attr("x", originalX + originalW * shrink / 2)
+                .attr("y", originalY + originalH * shrink / 2)
+                .attr("width", originalW * (1 - shrink))
+                .attr("height", originalH * (1 - shrink))
+                .transition()
+                .duration(100)
+                .attr("x", originalX)
+                .attr("y", originalY)
+                .attr("width", originalW)
+                .attr("height", originalH);
+
             updateVisualization(new Date(clickedDate),clickedVal);
             
             
